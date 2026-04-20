@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jardín Galáctico para MaRshell</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000b1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', sans-serif;
+            cursor: default;
+            touch-action: none; /* Evita zoom accidental en móviles */
+        }
+
+        /* CONTENEDOR DEL MENÚ CENTRAL */
+        #menu-central {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 1000;
+            transition: all 0.8s ease;
+            width: 90%;
+            text-align: center;
+        }
+
+        .texto-guia {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+            text-transform: lowercase;
+        }
+
+        #btn-regalo {
+            padding: 15px 40px;
+            font-size: clamp(1.2rem, 5vw, 1.8rem); /* Tamaño fluido */
+            color: white;
+            background: transparent;
+            border: 2px solid white;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.5s ease;
+            letter-spacing: 3px;
+            font-weight: bold;
+            width: auto;
+            max-width: 280px;
+        }
+
+        #btn-regalo:hover {
+            background: white;
+            color: #000b1a;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+        }
+
+        .texto-tenue {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.05);
+            margin-top: 25px;
+            max-width: 280px;
+            line-height: 1.4;
+            font-style: italic;
+            user-select: none;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+        }
+
+        /* ESTRELLA FUGAZ */
+        .contenedor-estrella {
+            position: absolute;
+            width: 120px; height: 120px;
+            display: flex; justify-content: center; align-items: center;
+            z-index: 500;
+        }
+
+        @keyframes shootInverse {
+            0% { transform: translate(0, 0) rotate(-20deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translate(-130vw, 40vh) rotate(-20deg); opacity: 0; }
+        }
+
+        .estrella-fugaz-visual {
+            width: 80px; height: 2px;
+            background: linear-gradient(to left, transparent, white);
+            border-radius: 2px;
+            filter: drop-shadow(0 0 5px white);
+        }
+
+        .interactive {
+            position: absolute;
+            z-index: 500;
+            padding: 25px; 
+            font-size: clamp(30px, 10vw, 45px);
+            user-select: none;
+        }
+
+        @keyframes driftUFO {
+            0% { left: -80px; top: 15%; }
+            100% { left: 110%; top: 22%; }
+        }
+        .ovni { animation: driftUFO 12s linear forwards; }
+
+        @keyframes flyRocket {
+            0% { left: -80px; top: 8%; }
+            100% { left: 110%; top: 5%; }
+        }
+        .cohete { animation: flyRocket 9s linear forwards; }
+
+        #frase-luna {
+            position: absolute;
+            color: #fff;
+            font-style: italic;
+            font-size: clamp(0.9rem, 4vw, 1.4rem);
+            pointer-events: none;
+            text-align: center;
+            width: 80%;
+            bottom: 15%;
+            opacity: 0;
+            transition: opacity 3s ease;
+            text-shadow: 0 0 10px white;
+            z-index: 600;
+        }
+
+        .hidden { opacity: 0; pointer-events: none; transform: scale(0.8); }
+    </style>
+</head>
+<body>
+
+    <div id="menu-central">
+        <div class="texto-guia">click en todo lo que veas</div>
+        <button id="btn-regalo">MaRshell</button>
+        <div class="texto-tenue">No sabia cual es tu flor fav asi que hice de todos los colores</div>
+    </div>
+
+    <div id="frase-luna">especialmente hoy la luna brillaba más bonita</div>
+    <canvas id="flowerCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('flowerCanvas');
+        const ctx = canvas.getContext('2d');
+        const btn = document.getElementById('btn-regalo');
+        const menuCentral = document.getElementById('menu-central');
+        const fraseLuna = document.getElementById('frase-luna');
+
+        let flowerData = [];
+        let stars = [];
+        let isStarted = false;
+        let startTime = 0;
+        
+        let starsActive = false;
+        let starColorMode = false;
+        let moonActive = false;
+
+        const CONFIG = {
+            totalFlores: window.innerWidth < 600 ? 500 : 1200, // Menos flores en móvil para fluidez
+            delayEntreFlores: 12,
+            velTallo: 0.5,
+            velPetalo: 0.04,
+            colorFondo: "#000b1a",
+            limiteCielo: 0.5 
+        };
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if(starsActive) initStars(); 
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        // SOPORTE PARA CLICK Y TOUCH
+        const handleInput = (e) => {
+            if (!isStarted) return;
+            const x = e.pageX || (e.touches ? e.touches[0].pageX : null);
+            const y = e.pageY || (e.touches ? e.touches[0].pageY : null);
+            
+            if (x && y && y > canvas.height * CONFIG.limiteCielo) {
+                plantFlowerAt(x, y);
+            }
+        };
+
+        window.addEventListener('mousedown', handleInput);
+        window.addEventListener('touchstart', (e) => {
+            // Evitar plantar si se toca un botón o elemento interactivo
+            if (e.target.classList.contains('interactive') || e.target.closest('.contenedor-estrella')) return;
+            handleInput(e);
+        });
+
+        btn.addEventListener('click', () => {
+            isStarted = true;
+            menuCentral.classList.add('hidden');
+            startTime = performance.now();
+            initFlowers();
+            requestAnimationFrame(animate);
+            startEventManager();
+        });
+
+        function initFlowers() {
+            flowerData = [];
+            for (let i = 0; i < CONFIG.totalFlores; i++) {
+                addFlowerRandom();
+            }
+        }
+
+        function addFlowerRandom() {
+            const hue = Math.random() * 360;
+            const limitHeight = canvas.height * CONFIG.limiteCielo;
+            flowerData.push({
+                relX: Math.random(),
+                angle: -Math.PI / 2 + (Math.random() - 0.5) * 1.5,
+                maxLen: 20 + Math.random() * limitHeight,
+                hue: hue,
+                numPetals: 5 + Math.floor(Math.random() * 3),
+                maxPetalSize: window.innerWidth < 600 ? 4 + Math.random() * 4 : 5 + Math.random() * 8,
+                currentLen: 0,
+                currentPetalSize: 0,
+                delay: flowerData.length * CONFIG.delayEntreFlores,
+                isAlien: false
+            });
+        }
+
+        function plantFlowerAt(x, y) {
+            const hue = Math.random() * 360;
+            const dy = y - canvas.height; 
+            flowerData.push({
+                relX: x / canvas.width,
+                angle: Math.atan2(dy, 0), 
+                maxLen: Math.abs(dy),
+                hue: hue,
+                numPetals: 6 + Math.floor(Math.random() * 4),
+                maxPetalSize: 7 + Math.random() * 5,
+                currentLen: 0,
+                currentPetalSize: 0,
+                delay: 0,
+                isAlien: false
+            });
+        }
+
+        function addAlienFlower(x) {
+            const limitHeight = canvas.height * CONFIG.limiteCielo;
+            flowerData.push({
+                relX: x / canvas.width,
+                angle: -Math.PI / 2,
+                maxLen: limitHeight * 0.7,
+                hue: 280, 
+                numPetals: 10,
+                maxPetalSize: 18,
+                currentLen: 0,
+                currentPetalSize: 0,
+                delay: 0,
+                isAlien: true
+            });
+        }
+
+        function initStars() {
+            stars = [];
+            const starCount = window.innerWidth < 600 ? 150 : 280;
+            for (let i = 0; i < starCount; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height * 0.65,
+                    size: Math.random() * 1.5,
+                    color: starColorMode ? `hsl(${Math.random() * 360}, 80%, 75%)` : "white"
+                });
+            }
+        }
+
+        function startEventManager() {
+            setInterval(() => {
+                if (!isStarted) return;
+                const rand = Math.random();
+                if (rand < 0.60) spawnShootingStar(); 
+                else if (rand < 0.95) spawnRocket();       
+                else spawnUFO();          
+            }, 4500); 
+        }
+
+        function spawnShootingStar() {
+            const container = document.createElement('div');
+            container.className = 'contenedor-estrella';
+            container.style.top = (Math.random() * 25 + 5) + "%";
+            container.style.left = "110%";
+            container.style.animation = "shootInverse 9s linear forwards";
+            const visual = document.createElement('div');
+            visual.className = 'estrella-fugaz-visual';
+            container.appendChild(visual);
+            document.body.appendChild(container);
+            
+            const action = (e) => {
+                e.stopPropagation();
+                if (!starsActive) { starsActive = true; starColorMode = false; initStars(); }
+                else { starColorMode = !starColorMode; initStars(); }
+                container.remove();
+            };
+            container.onclick = action;
+            container.ontouchstart = action;
+
+            setTimeout(() => { if(container.parentNode) container.remove(); }, 9000);
+        }
+
+        function spawnUFO() {
+            const ufo = document.createElement('div');
+            ufo.className = 'interactive ovni';
+            ufo.innerHTML = '🛸';
+            document.body.appendChild(ufo);
+            const action = (e) => {
+                e.stopPropagation();
+                addAlienFlower(ufo.offsetLeft + 20);
+                ufo.remove();
+            };
+            ufo.onclick = action;
+            ufo.ontouchstart = action;
+            setTimeout(() => { if(ufo.parentNode) ufo.remove(); }, 12000);
+        }
+
+        function spawnRocket() {
+            const rocket = document.createElement('div');
+            rocket.className = 'interactive cohete';
+            rocket.innerHTML = '🚀';
+            document.body.appendChild(rocket);
+            const action = (e) => {
+                e.stopPropagation();
+                if (!moonActive) moonActive = true;
+                else {
+                    fraseLuna.style.opacity = 1;
+                    setTimeout(() => fraseLuna.style.opacity = 0, 6000);
+                }
+                rocket.remove();
+            };
+            rocket.onclick = action;
+            rocket.ontouchstart = action;
+            setTimeout(() => { if(rocket.parentNode) rocket.remove(); }, 9000);
+        }
+
+        function animate(now) {
+            ctx.fillStyle = CONFIG.colorFondo;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const elapsed = now - startTime;
+
+            if (starsActive) {
+                stars.forEach(s => {
+                    ctx.fillStyle = s.color;
+                    ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
+                });
+            }
+
+            if (moonActive) {
+                ctx.save();
+                ctx.shadowBlur = 40; ctx.shadowColor = "white";
+                ctx.fillStyle = "#fffdf2";
+                const moonSize = window.innerWidth < 600 ? 35 : 55;
+                ctx.beginPath(); ctx.arc(canvas.width * 0.80, 80, moonSize, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+            }
+
+            for (let f of flowerData) {
+                if (elapsed < f.delay && !f.isAlien && f.delay !== 0) continue;
+                const px = f.relX * canvas.width;
+                const py = canvas.height;
+                if (f.currentLen < f.maxLen) f.currentLen += CONFIG.velTallo * (f.isAlien ? 3 : 1.5);
+                const ex = px + Math.cos(f.angle) * f.currentLen;
+                const ey = py + Math.sin(f.angle) * f.currentLen;
+
+                ctx.beginPath();
+                ctx.strokeStyle = f.isAlien ? "#00ffaa" : "#0f2e12";
+                ctx.lineWidth = f.isAlien ? 2 : 1;
+                ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke();
+
+                if (f.isAlien && f.currentLen >= f.maxLen) {
+                    ctx.beginPath(); ctx.strokeStyle = "#00ffaa"; ctx.lineWidth = 1;
+                    ctx.moveTo(ex, ey); ctx.lineTo(ex - 8, ey - 18); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(ex - 8, ey - 18, 2, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex + 8, ey - 18); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(ex + 8, ey - 18, 2, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            for (let f of flowerData) {
+                if ((elapsed < f.delay || f.currentLen < f.maxLen) && f.delay !== 0 && !f.isAlien) continue;
+                const ex = (f.relX * canvas.width) + Math.cos(f.angle) * f.maxLen;
+                const ey = canvas.height + Math.sin(f.angle) * f.maxLen;
+                if (f.currentPetalSize < f.maxPetalSize) f.currentPetalSize += CONFIG.velPetalo * (f.isAlien ? 10 : 2);
+                drawFlower(ex, ey, f.numPetals, f.currentPetalSize, f.hue, f.isAlien);
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function drawFlower(x, y, p, s, h, alien) {
+            ctx.save();
+            ctx.translate(x, y);
+            for (let i = 0; i < p; i++) {
+                ctx.beginPath();
+                ctx.rotate((Math.PI * 2) / p);
+                ctx.fillStyle = alien ? `hsl(280, 100%, 60%)` : `hsl(${h}, 70%, 65%)`;
+                ctx.ellipse(s, 0, s, s / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.beginPath();
+            ctx.fillStyle = alien ? "#00ffaa" : `hsl(${(h + 40) % 360}, 100%, 60%)`;
+            ctx.arc(0, 0, s / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>
